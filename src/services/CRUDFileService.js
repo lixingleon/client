@@ -30,6 +30,14 @@ class CRUDFileService{
     getFiles(){
         return http.get("api/Files");
     }
+
+    getMetaData(name){
+        return http.get("api/metadata", {
+            params:{
+                name:name
+            }
+        });
+    }
 }
 
 export default new CRUDFileService();
