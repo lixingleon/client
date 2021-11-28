@@ -6,7 +6,7 @@ import Button from "@material-ui/core/Button";
 import DeleteIcon from '@material-ui/icons/Delete';
 import CloudUploadIcon from '@material-ui/icons/CloudUpload';
 import {Typography} from "@material-ui/core";
-
+import AverageDisplayer from "./AverageDisplayerComponent"
 
 class UploadFileComponent extends React.Component{
 
@@ -184,14 +184,20 @@ class UploadFileComponent extends React.Component{
                                 (metadata, index) => {
                                     // <li className="list-group-item" id={index}>
 
-                                    return index>=3 ? <Button
+                                    return index>=3 ? <div style={{display:"flex", justifyContent:"center",
+                                        alignItems:"center"}}>
+                                            <Button
                                             onClick={() => {
                                         this.selectFeature(metadata);
                                             }}
                                             variant="outlined"
                                             color="primary"
+                                            style={{width:"70%"}}
                                             >
-                                            {metadata}</Button>
+                                            {metadata}
+                                            </Button>
+                                            <AverageDisplayer metadata={metadata} />
+                                                    </div>
                                         :
                                         <Typography  style={{textAlign:"center"}}>{metadata}</Typography>
                                 }
