@@ -1,5 +1,4 @@
 import React from "react";
-import CryptoJS from 'crypto-js';
 import UploadService from "../services/uploadFileService";
 import CRUDFileService from "../services/CRUDFileService";
 import Button from "@material-ui/core/Button";
@@ -7,7 +6,8 @@ import DeleteIcon from '@material-ui/icons/Delete';
 import CloudUploadIcon from '@material-ui/icons/CloudUpload';
 import {Typography} from "@material-ui/core";
 import AverageDisplayer from "./AverageDisplayerComponent"
-
+import SparkMD5 from "spark-md5"
+import PredictService from "../services/predictService";
 class UploadFileComponent extends React.Component{
 
     constructor(props) {
@@ -19,7 +19,8 @@ class UploadFileComponent extends React.Component{
             message: "",
             fileInfos: [],
             fileMetaData:undefined,
-            selectedFeatures:[]
+            selectedFeatures:[],
+            predict:undefined
         }
 
     }
@@ -48,6 +49,7 @@ class UploadFileComponent extends React.Component{
             });
 
     }
+
     listFiles(){
         CRUDFileService.getFiles().then((response) =>{
             const files = response.data;
@@ -60,10 +62,17 @@ class UploadFileComponent extends React.Component{
     async upload(){
         let currentFile = this.state.selectedFiles[0];
         //获取文件的md5,目的是文件秒传功能
-        const md5 = CryptoJS.MD5(CryptoJS.enc.Latin1.parse(currentFile)).toString();
+        const reader = new FileReader();
+        reader.onload = function(event){
+            let binary = event.target.result;
+            const md5 = SparkMD5.hashBinary(binary);
+            console.log("this file's md5 is : ",md5);
+            currentFile.uniqueIdentifier = md5;
+        }
+        reader.readAsBinaryString(currentFile);
+       // const md5 = CryptoJS.MD5(CryptoJS.enc.Latin1.parse(currentFile)).toString();
         //检查数据库是否已经有文件了：大文件秒传
-        let flag = await CRUDFileService.checkFile(md5);
-        console.log(md5);
+        let flag = await CRUDFileService.checkFile(currentFile.uniqueIdentifier);
         console.log("flag", flag);
         if(flag){
             alert("this file has already been uploaded!");
@@ -77,16 +86,16 @@ class UploadFileComponent extends React.Component{
         let chunkNum = chunkedFileList.length;
         for(let i = 0; i<chunkNum;i ++){
             //check if chunk is exist
-            let flag = await CRUDFileService.checkChunk(i, md5);
+            let flag = await CRUDFileService.checkChunk(i, currentFile.uniqueIdentifier);
             if(!flag){
-                await UploadService.uploadChunk(chunkedFileList[i], i, chunkNum, currentFile.name, md5);
+                await UploadService.uploadChunk(chunkedFileList[i], i, chunkNum, currentFile.name, currentFile.uniqueIdentifier);
             }
             this.setState({
                 //用已上传的分片文件除以总分片数得到进度条
                 progress:Math.round(100*(i+1)/chunkNum)
             });
         }
-        await UploadService.orderComposeFile(chunkNum, currentFile.name, md5);
+        await UploadService.orderComposeFile(chunkNum, currentFile.name, currentFile.uniqueIdentifier);
         this.listFiles();
 
 
@@ -101,7 +110,8 @@ class UploadFileComponent extends React.Component{
             message,
             fileInfos,
             fileMetaData,
-            selectedFeatures
+            selectedFeatures,
+            predict
         } = this.state;
 
         return(
@@ -148,32 +158,75 @@ class UploadFileComponent extends React.Component{
                     <div className="card-header">List of Files</div>
                     <ul className="list-group list-group-flush">
                         {fileInfos &&
-                        fileInfos.map(file =>
-                            <li className="list-group-item" key={file.id}>
-                                <div style={{display:"flex", justifyContent:"space-between",
-                                alignItems:"center"}}>
-                                    <div>{file.name}</div>
-                                    <div>
-                                        <Button variant="contained"
-                                                color="primary"
-                                                onClick={() =>this.getMetaData(file.name)}
-                                        >
-                                            Explore
-                                        </Button>
-                                        <Button variant="contained"
-                                                color="secondary"
-                                                startIcon={<DeleteIcon />}
-                                                onClick={()=>this.deleteFile(file.id, file.name)}
-                                        >Delete
-                                        </Button>
-                                    </div>
+                        fileInfos.map(file => {
+                                return (file.name.endsWith('jpg') || file.name.endsWith('jpeg') || file.name.endsWith('png')) ?
 
-                                </div>
-                            </li>
+                                    <li className="list-group-item" key={file.id}>
+                                        <div style={{
+                                            display: "flex", justifyContent: "space-between",
+                                            alignItems: "center"
+                                        }}>
+                                            <div>{file.name}</div>
+                                            <div>
+                                                <Button variant="contained"
+                                                        color="error"
+                                                        onClick={() => this.predict(file.name)}
+                                                >
+                                                    Predict
+                                                </Button>
+                                                <Button variant="contained"
+                                                        color="secondary"
+                                                        startIcon={<DeleteIcon/>}
+                                                        onClick={() => this.deleteFile(file.id, file.name)}
+                                                >Delete
+                                                </Button>
+                                            </div>
+
+                                        </div>
+                                    </li>
+                                    :
+                                    <li className="list-group-item" key={file.id}>
+                                        <div style={{
+                                            display: "flex", justifyContent: "space-between",
+                                            alignItems: "center"
+                                        }}>
+                                            <div>{file.name}</div>
+                                            <div>
+                                                <Button variant="contained"
+                                                        color="primary"
+                                                        onClick={() => this.getMetaData(file.name)}
+                                                >
+                                                    Explore
+                                                </Button>
+                                                <Button variant="contained"
+                                                        color="secondary"
+                                                        startIcon={<DeleteIcon/>}
+                                                        onClick={() => this.deleteFile(file.id, file.name)}
+                                                >Delete
+                                                </Button>
+                                            </div>
+
+                                        </div>
+                                    </li>
+                            }
 
                         )}
                     </ul>
                 </div>
+
+                {predict&& (
+                    <div className="card" >
+                        <div className="card-header">
+                            Prediction Result
+                        </div>
+                        <ul className="list-group list-group-flush">
+                            <li className="list-group-item">
+                                <Typography variant="h4">This pet will be adopted in {predict} days</Typography>
+                            </li>
+                        </ul>
+                    </div>
+                )}
+
                 {fileMetaData && (
                     <div className="card" >
                         <div className="card-header">
@@ -241,6 +294,12 @@ class UploadFileComponent extends React.Component{
         const response = await CRUDFileService.getMetaData(name);
         this.setState({
             fileMetaData:response.data
+        })
+    }
+    async predict(name){
+        const data = await PredictService.predict(name);
+        this.setState({
+            predict:data
         })
     }
 }
